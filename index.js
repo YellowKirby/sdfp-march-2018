@@ -1,62 +1,39 @@
 const R = require('ramda');
 
+const sortInc = R.sortBy(Math.min);
+const toLength = R.prop('length');
+
 const ranks = [...R.map(String, R.range(1, 11)), 'j', 'q', 'k', 'a'];
 
 const getFaces = R.map(R.head);
 const count = R.groupBy(R.identity);
 const countFaces = R.compose(count, getFaces);
+const groupByFaces = R.compose(sortInc, R.values, R.map(toLength), countFaces);
+const hasGroups = pattern => R.compose(R.equals(pattern), groupByFaces);
 
-const sortInc = R.sort((a, b) => a - b);
+const hands = {
+  'four-of-a-kind': hasGroups([1, 4]),
 
-const toLength = R.prop('length');
+  'full-house': hasGroups([2, 3]),
 
-const hands = [
-  {
-    name: 'full-house',
-    predicate: hand => {
-      const groups = new Set(Object.values(R.map(toLength, countFaces(hand))));
-      return R.equals(new Set([2, 3]), groups);
-    }
+  straight: hand => {
+    const sorted = sortInc(
+      R.map(x => R.findIndex(R.equals(x), ranks) % 13, getFaces(hand))
+    );
+    return R.equals(
+      R.map(x => parseInt(x, 10) - parseInt(sorted[0], 10), sorted),
+      R.range(0, 5)
+    );
   },
-  {
-    name: 'straight',
-    predicate: hand => {
-      const sorted = sortInc(
-        R.map(x => R.findIndex(R.equals(x), ranks) % 13, getFaces(hand))
-      );
-      return R.equals(
-        R.map(x => parseInt(x, 10) - parseInt(sorted[0], 10), sorted),
-        R.range(0, 5)
-      );
-    }
-  },
-  {
-    name: 'three-of-a-kind',
-    predicate: R.compose(
-      R.any(R.compose(R.equals(3), toLength)),
-      Object.values,
-      countFaces
-    )
-  },
-  {
-    name: 'two-pair',
-    predicate: R.compose(
-      R.equals([1, 2, 2]),
-      sortInc,
-      Object.values,
-      R.map(toLength),
-      countFaces
-    )
-  },
-  {
-    name: 'high-card',
-    predicate: R.compose(R.maxBy(number => ranks[number]), getFaces)
-  },
-  {
-    name: 'invalid',
-    predicate: _ => true
-  }
-];
+
+  'three-of-a-kind': hasGroups([1, 1, 3]),
+
+  'two-pair': hasGroups([1, 2, 2]),
+
+  'high-card': R.compose(R.maxBy(number => ranks[number]), getFaces),
+
+  invalid: R.T
+};
 
 function getHand(input) {
   return input.split(' ');
@@ -69,6 +46,5 @@ function getCard(input) {
 
 module.exports = function(input) {
   const hand = R.map(getCard, getHand(input));
-  const matching = R.find(x => x.predicate(hand), hands);
-  return matching.name;
+  return R.head(R.find(([_, predicate]) => predicate(hand), R.toPairs(hands)));
 };
