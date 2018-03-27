@@ -6,37 +6,55 @@ const toLength = R.prop('length');
 const ranks = [...R.map(String, R.range(1, 11)), 'j', 'q', 'k', 'a'];
 
 const getFaces = R.map(R.head);
-const count = R.groupBy(R.identity);
-const countFaces = R.compose(count, getFaces);
-const groupByFaces = R.compose(sortInc, R.values, R.map(toLength), countFaces);
-const hasGroups = pattern => R.compose(R.equals(pattern), groupByFaces);
+const getSuits = R.map(R.tail);
+const countGroups = R.compose(sortInc, R.values, R.countBy(R.identity));
+const hasGroups = pattern => R.compose(R.equals(pattern), countGroups);
+
+const hasFaceGroups = pattern => hand => hasGroups(pattern)(getFaces(hand));
+const hasSuitGroups = pattern => hand => hasGroups(pattern)(getSuits(hand));
+
+const getSequences = hand =>
+  R.groupWith(
+    (a, b) => b - a === 1,
+    sortInc(R.map(R.indexOf(R.__, ranks), getFaces(hand)))
+  );
 
 const hands = {
-  'four-of-a-kind': hasGroups([1, 4]),
+  'royal-flush': hand =>
+    R.allPass([
+      hand => hands.flush(hand),
+      hand => R.equals(getSequences(hand), [[9, 10, 11, 12, 13]])
+    ])(hand),
 
-  'full-house': hasGroups([2, 3]),
+  'straight-flush': hand => hands.straight(hand) && hands.flush(hand),
 
-  straight: hand => {
-    const sorted = sortInc(
-      R.map(x => R.findIndex(R.equals(x), ranks) % 13, getFaces(hand))
-    );
-    return R.equals(
-      R.map(x => parseInt(x, 10) - parseInt(sorted[0], 10), sorted),
-      R.range(0, 5)
-    );
-  },
+  'four-of-a-kind': hasFaceGroups([1, 4]),
 
-  'three-of-a-kind': hasGroups([1, 1, 3]),
+  'full-house': hasFaceGroups([2, 3]),
 
-  'two-pair': hasGroups([1, 2, 2]),
+  flush: hasSuitGroups([5]),
 
-  'high-card': R.compose(R.maxBy(number => ranks[number]), getFaces),
+  straight: R.compose(
+    R.anyPass([
+      R.compose(R.equals(1), toLength),
+      R.equals([[1, 2, 3, 4], [13]])
+    ]),
+    getSequences
+  ),
+
+  'three-of-a-kind': hasFaceGroups([1, 1, 3]),
+
+  'two-pair': hasFaceGroups([1, 2, 2]),
+
+  'one-pair': hasFaceGroups([1, 1, 1, 2]),
+
+  'high-card': R.compose(R.maxBy(R.nth(ranks)), getFaces),
 
   invalid: R.T
 };
 
 function getHand(input) {
-  return input.split(' ');
+  return input.split(/\s+/);
 }
 
 function getCard(input) {
